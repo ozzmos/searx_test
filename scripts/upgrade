@@ -1,0 +1,92 @@
+#!/bin/bash
+app="searx"
+
+# causes the shell to exit if any subcommand or pipeline returns a non-zero status
+set -e
+
+# Source app helpers
+. /usr/share/yunohost/helpers
+
+# Retrieve arguments
+domain=$(ynh_app_setting_get "$app" domain)
+path=$(ynh_app_setting_get "$app" path)
+is_public=$(ynh_app_setting_get "$app" is_public)
+
+# Remove trailing slash to path
+path=${path%/}
+#force location to be / or /foo
+location=${path:-/}
+
+# Check depends installation
+sudo apt-get install git build-essential libxslt-dev python-dev python-virtualenv virtualenv python-pybabel zlib1g-dev libffi-dev libssl-dev python-lxml uwsgi uwsgi-plugin-python -y
+
+# Check Swap
+if [ $(sudo swapon -s | wc -l) = 1 ];
+then
+    mount | grep /tmp | grep tmpfs > /dev/null 2>&1
+    if [ $? = 1 ];
+    then
+        tmp_swap_file=/tmp/searx_swapfile
+    else
+        tmp_swap_file=/var/cache/
+    fi
+    sudo dd if=/dev/zero of=$tmp_swap_file bs=1M count=256
+    sudo chmod 600 $tmp_swap_file
+    sudo mkswap $tmp_swap_file
+    sudo swapon $tmp_swap_file
+fi
+
+final_path=/opt/yunohost/$app
+sudo cp -r ../sources/* $final_path
+sudo bash -c "source $final_path/bin/activate && pip install -r $final_path/requirements-ynh.txt --upgrade"
+
+# Disable swapfile
+if [[ -v "$tmp_swap_file" ]];
+then
+    sudo swapoff $tmp_swap_file
+    sudo rm -f $tmp_swap_file
+fi
+
+#Configuration Searx
+sudo cp ../conf/settings.yml $final_path/searx/
+sudo sed -i -e "s/ultrasecretkey/`openssl rand -hex 16`/g" $final_path/searx/settings.yml
+if [ "$path" != "/" ];
+then
+    sudo sed -i -e "s@ynhbaseurl@https://$domain$path/@g" $final_path/searx/settings.yml
+else
+    sudo sed -i -e "s@ynhbaseurl@False@g" $final_path/searx/settings.yml
+fi
+
+# Set permissions to searx directory
+if ! id -u searx > /dev/null 2>&1; then
+    sudo useradd searx -d $final_path
+fi
+sudo chown searx:searx -R $final_path
+
+# Copy uwsgi config
+sudo cp ../conf/searx.ini /etc/uwsgi/apps-available/$app.ini
+
+# Modify Nginx configuration file and copy it to Nginx conf directory
+sed -i "s@YNH_WWW_LOCATION@$location@g" ../conf/nginx.conf*
+sed -i "s@YNH_WWW_PATH@$path@g" ../conf/nginx.conf*
+if [ "$path" != "/" ];
+then
+    sudo cp ../conf/nginx.conf-noroot /etc/nginx/conf.d/$domain.d/$app.conf
+else
+    sudo cp ../conf/nginx.conf /etc/nginx/conf.d/$domain.d/$app.conf
+fi
+
+# Fix permission
+#sudo find $final_path/ -type d -exec chmod 2755 {} \;
+#sudo find $final_path/ -type f -exec chmod g+r,o+r {} \;
+
+if [ "$is_public" = "Yes" ];
+then
+    sudo yunohost app setting searx skipped_uris -d
+    sudo yunohost app setting searx unprotected_uris -v "/"
+fi
+
+## Reload services
+sudo service nginx reload
+sudo service uwsgi restart
+

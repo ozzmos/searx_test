@@ -1,0 +1,21 @@
+#!/bin/bash
+app="searx"
+
+# causes the shell to exit if any subcommand or pipeline returns a non-zero status
+set -e
+
+# Source YNH helpers
+. /usr/share/yunohost/helpers
+
+# Retrieve arguments
+domain=$(ynh_app_setting_get "$app" domain)
+path=$(ynh_app_setting_get "$app" path)
+is_public=$(ynh_app_setting_get "$app" is_public)
+
+# Backup sources & data
+ynh_backup "/opt/yunohost/$app" "sources"
+
+# Copy Nginx conf
+ynh_backup "/etc/uwsgi/apps-available/$app.ini" "conf/searx.ini"
+ynh_backup "/opt/yunohost/$app/searx/settings.yml" "conf/settings.yml"
+ynh_backup "/etc/nginx/conf.d/$domain.d/$app.conf" "conf/nginx.conf"

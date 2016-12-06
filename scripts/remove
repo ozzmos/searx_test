@@ -1,0 +1,30 @@
+#!/bin/bash
+app="searx"
+
+# Source app helpers
+. /usr/share/yunohost/helpers
+
+# Retrieve arguments
+domain=$(ynh_app_setting_get "$app" domain)
+
+# Remove files
+sudo rm -Rf /opt/yunohost/$app
+sudo rm -f /etc/uwsgi/apps-enabled/$app.ini
+sudo rm -f /etc/uwsgi/apps-available/$app.ini
+sudo rm -f /etc/nginx/conf.d/$domain.d/$app.conf
+
+# Stop uwsgi
+sudo service uwsgi stop
+sudo killall uwsgi
+
+# Remove user (kill attached process before)
+if id -u searx > /dev/null 2>&1; then
+    sudo killall -KILL -u searx
+    sudo userdel --force searx
+fi
+
+# Restart uwsgi
+sudo service uwsgi start
+
+# Reload Nginx
+sudo service nginx reload

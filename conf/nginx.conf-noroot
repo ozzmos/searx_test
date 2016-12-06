@@ -1,0 +1,18 @@
+location = YNH_WWW_LOCATION { rewrite ^ YNH_WWW_LOCATION/; }
+
+location YNH_WWW_LOCATION {
+        if ($scheme = http) {
+                rewrite ^ https://$server_name$request_uri? permanent;
+        }
+        try_files $uri @searx;
+}
+
+location @searx {
+        uwsgi_param SCRIPT_NAME 'YNH_WWW_LOCATION';
+        include uwsgi_params;
+        uwsgi_modifier1 30;
+        uwsgi_pass unix:///run/uwsgi/app/searx/socket;
+
+        # Include SSOWAT user panel.
+        include conf.d/yunohost_panel.conf.inc;
+}
