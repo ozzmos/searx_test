@@ -56,6 +56,8 @@ if [ ! -d $final_path ];
 then
     sudo mkdir -p $final_path
 fi
+wget https://github.com/asciimoo/searx/archive/v0.10.0.zip
+unzip v0.10.0.zip && mv searx-0.10.0 ../sources/searx
 sudo cp -r ../sources/* $final_path
 sudo virtualenv --system-site-packages $final_path
 sudo bash -c "source $final_path/bin/activate && pip install -r $final_path/requirements-ynh.txt"
